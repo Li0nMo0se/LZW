@@ -12,38 +12,99 @@ def uncompress(file, dic):
     pass
 
 
-def compress(file):
+def write_addr_n_bits(addr, size):
+    res = str(bin(addr)[2:])
+    padding = size - len(res)
+    zeros = '0'*padding
+    res = zeros + res
+    return res
+
+
+def make_dico(file, special_character='%'):
+    dico_set = set()
+    for c in file:
+        dico_set.add(c)
+    dico_set.add(special_character)
+    dico = list(dico_set)
+    dico.sort()
+    return dico
+
+
+def compress(file, special_character='%'):
     """
     Compress a file (its content)
     :param file: file to compress
+    :param special_character:
     :return: list of address (integers) which represents the output
     """
 
-    def make_dico(file):
-        dico_set = set()
-        for c in file:
-            dico_set.add(c)
-        dico_set.add('%')
-        dico = list(dico_set)
-        dico.sort()
-        return dico
+    def check_size_address(addr_output, curr_size, output):
+        addr_size = size_in_bits(addr_output)
+        delta_size = addr_size - curr_size
 
-    dico = make_dico(file)
+        if delta_size > 0:
+            addr_special_character = dico.index(special_character)
+            df.loc[df_i - 1]['Output'] = \
+                f"@[{special_character * delta_size}]=" \
+                f"{addr_special_character * delta_size}"
 
-    curr_addr = len(dico)
-    output = "I AM AN INVALID OUTPUT!"
+            for i in range(delta_size):
+                output += write_addr_n_bits(addr_special_character, curr_size)
+
+        return delta_size, output
+
+
+    dico = make_dico(file, special_character)
+
+    addr = len(dico)
+    output = ''
     df = pd.DataFrame(columns=['Buffer', 'Input', 'New sequence', 'Address',
                                'Output'])
+
+    curr_size = size_in_bits(addr - 1)
     df_i = 0
-    for c in file:  # foreach input character in the file
-        #  TODO
-        input = c
-        buffer = c
-        new_seq = ''
-        addrr = curr_addr
-        output_local = f"@[{input}]"
-        df.loc[df_i] = [input, buffer, new_seq, addrr, output_local]
+    buffer = ''
+    for input in file:  # foreach input character in the file
+
+        new_seq = buffer + input
+        if new_seq in dico:
+            df.loc[df_i] = [buffer, input, '', '', '']
+            buffer = new_seq
+        else:  # the new sequence does not exist in the dictionary
+            # Update dico
+            dico.append(new_seq)
+            output_local = new_seq[:-1]  # all except last character
+            addr_output = dico.index(output_local)
+
+            # Check size of the address
+            delta_size, output = check_size_address(addr_output, curr_size,
+                                                  output)
+            if delta_size > 0:
+                curr_size += delta_size
+
+            # update table
+            output_local = f"@[{output_local}]={addr_output}"
+            df.loc[df_i] = [buffer, input, new_seq, addr, output_local]
+            addr += 1
+            buffer = new_seq[-1]
+
+            # Update output
+            output += write_addr_n_bits(addr_output, curr_size)
+
         df_i += 1
+
+    # no more characters. Empty the buffer now
+    assert (buffer in dico)
+
+    addr_output = dico.index(buffer)
+    delta_size, output = check_size_address(addr_output, curr_size, output)
+    if delta_size > 0:
+        curr_size += delta_size
+
+    output_local = f"@[{buffer}]={addr_output}"
+    df.loc[df_i] = [buffer, '', '', '', output_local]
+    df_i += 1
+    output += write_addr_n_bits(addr_output, curr_size)
 
     return output, df, dico
 
@@ -95,6 +156,10 @@ def get_file_content(filename):
     if file_content[-1] == '\n':
         file_content = file_content[:-1]
     return file_content
+
+
+def size_in_bits(nb):
+    return nb.bit_length()
 
 
 if __name__ == '__main__':
