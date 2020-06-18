@@ -1,0 +1,2 @@
+# LZW
+LZW compression
