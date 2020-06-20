@@ -14,7 +14,7 @@ def read_addr_n_bits(input, size):
 def write_addr_n_bits(addr, size):
     res = str(bin(addr)[2:])
     padding = size - len(res)
-    zeros = '0'*padding
+    zeros = '0' * padding
     res = zeros + res
     return res
 
@@ -69,8 +69,6 @@ def uncompress(file, dico, special_character='%'):
     df_i += 1
     output += buffer
 
-    print(df)
-    print(output)
     return output
 
 
@@ -107,7 +105,6 @@ def compress(file, special_character='%'):
 
         return delta_size, output
 
-
     dico = make_dico(file, special_character)
 
     addr = len(dico)
@@ -132,7 +129,7 @@ def compress(file, special_character='%'):
 
             # Check size of the address
             delta_size, output = check_size_address(addr_output, curr_size,
-                                                  output)
+                                                    output)
             if delta_size > 0:
                 curr_size += delta_size
 
@@ -163,7 +160,7 @@ def compress(file, special_character='%'):
     return output, df, dico
 
 
-def process_compression_results(filename, output, df, dico):
+def process_compression_results(filename, output, df, dico, file_content):
     # Get the prefix of the file name
     prefix = filename[filename.rfind('/') + 1:]
     prefix = prefix[:-4]  # avoid .txt extension
@@ -175,10 +172,34 @@ def process_compression_results(filename, output, df, dico):
     # Save dico
     df_dico = pd.DataFrame(columns=dico)
     dico_file = prefix + '_dico.csv'
-    df_dico.to_csv(dico_file)
+    df_dico.to_csv(dico_file, index=False)
 
     # Save the output of the compression
     output_file = prefix + '.lzw'
+    output_file = open(output_file, "w")
+    output_file.write(output)
+
+    dico_init = make_dico(file_content)
+    # -2 to avoid computing the special character and address begins at 0
+    # Not sure though
+    size_before_compression = size_in_bits(len(dico_init) - 2) \
+                              * len(file_content)
+    output_file.write(f"\nSize before LZW compression: "
+                      f"{size_before_compression}")
+    output_file.write(f"\nSize after LZW compression: {len(output)}")
+    # Should i round here?
+    ratio = round(len(output) / size_before_compression, 3)
+    output_file.write(f"\nCompression ratio: {ratio}\n")
+    output_file.close()
+
+
+def save_output(filename, output, ext=""):
+    # Get the prefix of the file name
+    prefix = filename[filename.rfind('/') + 1:]
+    prefix = prefix[:-4]  # avoid .lzw extension
+
+    # Save output file
+    output_file = prefix + ext
     output_file = open(output_file, "w")
     output_file.write(output)
     output_file.close()
@@ -212,8 +233,6 @@ def get_file_content(filename):
     return file_content
 
 
-
-
 if __name__ == '__main__':
     #  parse command line
     parser = argparse.ArgumentParser(description='LZW compression and '
@@ -231,11 +250,13 @@ if __name__ == '__main__':
         # Get the whole content of the file
         file_content = get_file_content(filename)
         output, df_res, dico_res = compress(file_content)
-        process_compression_results(filename, output, df_res, dico_res)
+        process_compression_results(filename, output, df_res, dico_res,
+                                    file_content)
 
     if args.u:
         # Get the initial dictionary
         dic = get_dictionary_from_csv(filename)
         # Get the string to uncompress
         file_content = get_file_content(filename)
-        uncompress(file_content, dic)
+        output = uncompress(file_content, dic)
+        save_output(filename, output, ".txt")
